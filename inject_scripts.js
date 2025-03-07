@@ -104,6 +104,7 @@
 
     function handleTableMessage(tableId, card1, card2, tableName, theTime, betAmount) {
         console.info('handle table message:', tableId, card1, card2, tableName, theTime, betAmount);
+        console.info('receive message spend time:',Date.now()-theTime)
         if (tableId == 8801 && isLongHuPage()) {
             console.info('当前是龙虎 L01页面,且是龙虎消息,立即处理...');
             return handleMessage(card1, card2, theTime, betAmount);
@@ -314,7 +315,7 @@
         // 从 localStorage 加载数据，如果没有则使用默认值
         const storedValues = window.betRates || JSON.parse(localStorage.getItem('betRates')) || defaultValues;
         window.betRates = storedValues;
-
+        let isLonghuPage = isLongHuPage();
         // 创建标签、输入框和复选框
         const labelsAndInputs = Object.keys(window.betRates);
         labelsAndInputs.forEach(labelText => {
@@ -344,14 +345,16 @@
             input.value = storedValues[labelText][0];
             checkbox.checked = storedValues[labelText][1];
 
+            if (isLonghuPage && labelText == '龙虎'||!isLonghuPage&&labelText !== '龙虎') {
+            
+                // 将标签、复选框和输入框添加到容器
+                container.appendChild(label);
+                container.appendChild(checkbox);
+                container.appendChild(input);
 
-            // 将标签、复选框和输入框添加到容器
-            container.appendChild(label);
-            container.appendChild(checkbox);
-            container.appendChild(input);
-
-            // 将容器添加到悬浮 div
-            floatingDiv.appendChild(container);
+                // 将容器添加到悬浮 div
+                floatingDiv.appendChild(container);
+            }
         });
 
         // 创建保存按钮
