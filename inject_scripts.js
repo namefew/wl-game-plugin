@@ -53,7 +53,12 @@
         }
         if(betAmount==0){
             betAmount = localStorage.getItem('betAmount');
-            if(!betAmount||betAmount==0)betAmount=10;
+            if(!betAmount||betAmount==0){
+                if (window.betRates && window.betRates['龙虎']){
+                    betAmount = window.betRates['龙虎'][0]
+                }
+            }
+            if(!betAmount||betAmount==0) betAmount=10;
         }
         if(betAmount<=1){
             let maxBet = localStorage.getItem('totalMoney')
@@ -70,12 +75,14 @@
         const area_num = card1_num > card2_num ? 0 : (card1_num < card2_num ? 2 : 1);
 
         if (self.wsNet && wsNet.send) {
+            const randomTimeOffset = Math.floor(Math.random() * (300 - 100 + 1))+100;
+            const timestmp = Date.now()-randomTimeOffset
             if (card1_num > card2_num) {
-                wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + Date.now(), areaBet: [{ area: 1, bet: betAmount * 100, betType: 0, count: 1 }] });
+                wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + timestmp, areaBet: [{ area: 1, bet: betAmount * 100, betType: 0, count: 1 }] });
             } else if (card1_num < card2_num) {
-                wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + Date.now(), areaBet: [{ area: 2, bet: betAmount * 100, betType: 0, count: 1 }] });
+                wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + timestmp, areaBet: [{ area: 2, bet: betAmount * 100, betType: 0, count: 1 }] });
             } else if (card1_num == card2_num) {
-                wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + Date.now(), areaBet: [{ area: 3, bet: betAmount * 100, betType: 0, count: 1 }] });
+                wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + timestmp, areaBet: [{ area: 3, bet: betAmount * 100, betType: 0, count: 1 }] });
             }
             console.info('handle pack spend time:', new Date().getTime() - theTime, card1_num, card2_num, area_num,betAmount);
             //return;
@@ -122,7 +129,7 @@
             return void 0;
         }
     
-        let  = getMaxSelectedChipValue();
+        let maxBet = getMaxSelectedChipValue();
         const card1_num = (card1 % 13) + 1;
         const card2_num = (card2 % 13) + 1;
         let dot1 = card1_num >= 10 ? 0 : card1_num, dot2 = card2_num >= 10 ? 0 : card2_num;
@@ -138,11 +145,12 @@
         }
         if(card1_num==card2_num){
             let key = '闲对'
+            theDotKey = key
             needBet = window.betRates[key][1]
             needBetAmount = window.betRates[key][0]
         }
+        console.info("闲"+xDot+"["+card1_num+","+card2_num+"] 下注:"+theDotKey+" - "+needBet+" - "+needBetAmount);
         if(!needBet){
-            console.info("闲"+xDot+"["+card2_num+","+card2_num+"]  "+theDotKey+" 配置了不下注。");
             return
         }
         // area-0:闲对  area-3:闲  area-5:庄  area-4:和
@@ -170,7 +178,7 @@
             theBetAmount = maxBet * theBetAmount;
         }
         if (theBetAmount < 10) theBetAmount = 10;
-    
+        console.info('bet area:'+betArea+' money:'+theBetAmount);
         const coins = selectCoins(theBetAmount);
         if (coins.length == 0) return;
         const chipValue = coins[0];
@@ -345,16 +353,16 @@
             input.value = storedValues[labelText][0];
             checkbox.checked = storedValues[labelText][1];
 
-            if (isLonghuPage && labelText == '龙虎'||!isLonghuPage&&labelText !== '龙虎') {
-            
-                // 将标签、复选框和输入框添加到容器
-                container.appendChild(label);
-                container.appendChild(checkbox);
-                container.appendChild(input);
+            let display = isLonghuPage && labelText == '龙虎'||!isLonghuPage&&labelText !== '龙虎';
+            container.style = 'display:'+(display?'block':'none');
+			// 将标签、复选框和输入框添加到容器
+			container.appendChild(label);
+			container.appendChild(checkbox);
+			container.appendChild(input);
 
-                // 将容器添加到悬浮 div
-                floatingDiv.appendChild(container);
-            }
+			// 将容器添加到悬浮 div
+			floatingDiv.appendChild(container);
+            
         });
 
         // 创建保存按钮
@@ -435,7 +443,22 @@
 
     // 创建悬浮 div
     createFloatingDiv();
-
+    // 添加自定义 CSS
+    function addCustomCSS() {
+        const style = document.createElement('style');
+        style.textContent = `
+            /* 自定义 CSS 规则 */
+            .van-overlay {
+                display: none;
+            }
+            .van-dialog {
+                display: none;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    // 调用函数添加 CSS
+    addCustomCSS();
     console.info('injecting scripts successfully.');
     return true;
 })();
