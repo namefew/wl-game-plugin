@@ -152,11 +152,7 @@
         if(!needBet){
             return
         }
-        if (isBetting){
-            console.debug("有其他桌正在下注...,本次取消："+tableId)
-            return;
-        }
-        isBetting = true;
+
         // area-0:闲对  area-3:闲  area-5:庄  area-4:和
         const betAreaMap = {
             0: 'area-5',
@@ -192,6 +188,11 @@
             console.info('handle pack spend time:', new Date().getTime() - theTime, card1_num, card2_num, betArea,theBetAmount);
             return;
         }
+        if (isBetting){
+            console.debug("有其他桌正在下注...,本次取消："+tableId)
+            return;
+        }
+        isBetting = true;
         const coins = selectCoins(theBetAmount);
         if (coins.length == 0) return;
         const chipValue = coins[0];
@@ -409,15 +410,15 @@
         floatingDiv.appendChild(title);
         // 默认值
         const defaultValues = {
-//            '0庄': [0.29, false],
-//            '1庄': [0.28, false],
-//            '2庄': [0.25, false],
-//            '3庄': [0.21, false],
-//            '4庄': [0.14, false],
-//            '5庄': [0.05, false],
-//            '6和': [0.03, false],
-//            '7闲': [0.15, false],
-//            '8闲': [0.65, false],
+            '0庄': [0.29, false],
+            '1庄': [0.28, false],
+            '2庄': [0.25, false],
+            '3庄': [0.21, false],
+            '4庄': [0.14, false],
+            '5庄': [0.05, false],
+            '6和': [0.03, false],
+            '7闲': [0.15, false],
+            '8闲': [0.65, false],
             '9闲': [1, true],
             '闲对': [1, true],
             '龙虎': [1, true]
