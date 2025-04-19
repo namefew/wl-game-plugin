@@ -206,6 +206,10 @@ async function attachDebugger() {
             if (isGame && !attachedTabs.has(target.id)) {
                 // Step 2: 连接到目标
                 chrome.debugger.attach({ targetId: target.id }, "1.3", () => {
+                    if (chrome.runtime.lastError?.message.includes("already attached")) {
+                        console.log('Already attached, skip');
+                        return;
+                    }
                     if (chrome.runtime.lastError) {
                         console.error(chrome.runtime.lastError.message);
                     }
@@ -233,72 +237,88 @@ function inject_scripts(target, script) {
                 return;
             }
             console.log('注入方法成功:', result);
+            setBreak(target);
         });
 
     });
 }
 function setBreak(target) {
-     // 设置断点
-    const newUrl = new URL(target.url).origin + '/video/assets/_nexus-CG5Ud4Gb.js';
-    console.info("开始设置断点...",target.url);
     chrome.debugger.sendCommand({ targetId: target.id }, 'Debugger.setBreakpointByUrl', {
-        lineNumber: 42,      // 你的目标行号
-        columnNumber: 41525,     // 你的目标列号
-        url: newUrl, // 你的目标脚本URL'https://nt5j7rgv.ddwkx.cn/video/assets/_nexus-CG5Ud4Gb.js',
+        lineNumber: 41,
+        columnNumber: 41525,
+        urlRegex: '.*/video/assets/_nexus-.*\\.js(\\?.*)?',
         condition: ""
     }, (breakpoint) => {
         if (chrome.runtime.lastError) {
             console.error("设置断点失败：", chrome.runtime.lastError.message);
             return;
         }
-        console.info("设置断点结果：", breakpoint,target.url);
-        let currentBreakpointId = breakpoint.breakpointId;
-        console.log('断点设置成功:', currentBreakpointId,target.url);
-        // 处理断点触发
-        chrome.debugger.onEvent.addListener((source, method, params) => {
-            if (method === 'Debugger.paused' && source.targetId === currentBreakpointId) {
-                console.log('Debugger event:', method, params,source,target.url);
-                handleBreak(target, currentBreakpointId);
+
+        const currentBreakpointId = breakpoint.breakpointId;
+        console.log('断点设置成功:', currentBreakpointId, target.url);
+
+        // 监听暂停事件并关联上下文
+        const onPaused = (source, method, params) => {
+            if (method === 'Debugger.paused') {
+                const topCallFrame = params.callFrames[0];
+                if (!topCallFrame) return;
+
+                // 直接使用 callFrameId 执行代码
+                handleBreak(target, currentBreakpointId, topCallFrame.callFrameId);
             }
-        });
+        };
+
+        chrome.debugger.onEvent.addListener(onPaused);
     });
 }
 
-function handleBreak(target, currentBreakpointId) {
+function handleBreak(target, currentBreakpointId,callFrameId) {
     try {
         console.info("执行到断点 ...",target.url);
         // 执行你的自定义代码
-        script = 'console.info("执行断点!"); if(WSNet)self.wsNet=this;console.info(self.wsNet);';
+        script = 'console.info("断点执行:",this);if(WSNet){self.wsNet=this;console.info(self.wsNet);console.info("设置wsNet成功");a = true;}else{ console.info("设置wsNet失败");a = false;}';
         console.info("执行自定义代码...", script, target.url);
-        chrome.debugger.sendCommand({ targetId: target.id }, "Runtime.evaluate", {
-            expression: script
+        chrome.debugger.sendCommand({ targetId: target.id }, "Debugger.evaluateOnCallFrame", {
+            expression: script,
+            callFrameId: callFrameId
         }, (result) => {
             if (chrome.runtime.lastError) {
                 console.error("",chrome.runtime.lastError.message);
                 return;
             }
             console.log('执行自定义代码成功:', result);
-             // 移除断点
-            console.info("移除断点...", currentBreakpointId, target.url);
-            chrome.debugger.sendCommand({
-                    targetId: target.id
-                }, 'Debugger.removeBreakpoint', {
-                    breakpointId: currentBreakpointId
-                }, (result) => {
-                    if (chrome.runtime.lastError) {
-                        console.error(chrome.runtime.lastError.message);
-                    }
-                    console.info("恢复执行...", target.url);
-                    chrome.debugger.sendCommand({
+            if(result.result.value){
+                 // 移除断点
+                console.info("移除断点...", currentBreakpointId, target.url);
+                chrome.debugger.sendCommand({
                         targetId: target.id
-                    }, 'Debugger.resume', () => {
+                    }, 'Debugger.removeBreakpoint', {
+                        breakpointId: currentBreakpointId
+                    }, (result1) => {
                         if (chrome.runtime.lastError) {
                             console.error(chrome.runtime.lastError.message);
                         }
-                        console.info("恢复执行完成", target.url);
+                        console.info("恢复执行...", target.url);
+                        chrome.debugger.sendCommand({
+                            targetId: target.id
+                        }, 'Debugger.resume', () => {
+                            if (chrome.runtime.lastError) {
+                                console.error(chrome.runtime.lastError.message);
+                            }
+                            console.info("恢复执行完成", target.url);
+                        });
                     });
+            }else{
+                console.info("恢复执行...", target.url);
+                chrome.debugger.sendCommand({
+                    targetId: target.id
+                }, 'Debugger.resume', () => {
+                    if (chrome.runtime.lastError) {
+                        console.error(chrome.runtime.lastError.message);
+                    }
+                    console.info("恢复执行完成", target.url);
                 });
-
+            }
          });
 
     } catch (error) {

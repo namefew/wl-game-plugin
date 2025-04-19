@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 加载配置项
     chrome.storage.local.get(['wsUrl', 'amount', 'gameUrlPattern'], function(items) {
         wsUrlInput.value = items.wsUrl || 'ws://localhost:8765/long-hu';
-        amountInput.value = items.amount || 10;
+        amountInput.value = items.amount;
         gameUrlPatternInput.value = items.gameUrlPattern || '/video/,?token=';
     });
 

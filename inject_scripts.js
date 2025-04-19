@@ -1,6 +1,6 @@
 (function() {
     console.info("injecting script to self:", self);
-
+    window.isBetting=false
     function clickCenter(element, clickCount = 1) {
         if (!element) {
             console.warn('handleMessage clickCenter: element is null or undefined');
@@ -43,14 +43,14 @@
     function isLongHuPage(){
         return getNavigationTitle().includes('L01')
     }
-   
+
     function handleMessage(card1, card2, theTime, betAmount) {
         console.info('handle message:', card1, card2, theTime, betAmount);
-        if (!isLongHuPage()) {
-            console.warn('当前不是"龙虎 L01"页面,忽略消息');
-            removeFloatingDiv();
-            return;
-        }
+        // if (!isLongHuPage()) {
+        //     console.warn('当前不是"龙虎 L01"页面,忽略消息');
+        //     removeFloatingDiv();
+        //     return;
+        // }
         if(betAmount==0){
             betAmount = localStorage.getItem('betAmount');
             if(!betAmount||betAmount==0){
@@ -85,7 +85,7 @@
                 wsNet.send(500, 2000, { roomId: 8801, betEnv: 1, carrier: '8801-' + timestmp, areaBet: [{ area: 3, bet: betAmount * 100, betType: 0, count: 1 }] });
             }
             console.info('handle pack spend time:', new Date().getTime() - theTime, card1_num, card2_num, area_num,betAmount);
-            //return;
+            return;
         }
 
         const coins = selectCoins(betAmount);
@@ -106,29 +106,28 @@
 
     function isMutipleTable(){
         let firstRoombettingDiv = document.querySelector('#more-list-wrap .room-betting')
-        return firstRoombettingDiv!==undefined
+        return firstRoombettingDiv
     }
 
     function handleTableMessage(tableId, card1, card2, tableName, theTime, betAmount) {
         console.info('handle table message:', tableId, card1, card2, tableName, theTime, betAmount);
         console.info('receive message spend time:',Date.now()-theTime)
-        if (tableId == 8801 && isLongHuPage()) {
+        let navTitle = getNavigationTitle();
+        if (tableId == 8801 && navTitle.includes('L01')) {
             console.info('当前是龙虎 L01页面,且是龙虎消息,立即处理...');
             return handleMessage(card1, card2, theTime, betAmount);
         } else if (tableId == 8801) {
             console.info('当前不是龙虎页面，忽略龙虎消息。');
             return;
         }
-        if (!isMutipleTable()) {
-            console.info('当前不是多桌投注页面...');
-            let navigationTitle = getNavigationTitle();
-            if (navigationTitle.includes(tableName)) {
-                console.info('当前在游戏' + tableName + '页面...');
-                return betBaccInSingleTable(tableId, card1, card2, theTime, betAmount);
-            }
-            return void 0;
+        if (navTitle.includes(tableName)) {
+            //console.info('当前在游戏' + tableName + '页面...');
+            return betBaccInSingleTable(tableId, card1, card2, theTime, betAmount);
         }
-    
+        if (!isMutipleTable()) {
+            console.info('当前不是多台游戏页面，忽略消息。');
+            return;
+        }
         let maxBet = getMaxSelectedChipValue();
         const card1_num = (card1 % 13) + 1;
         const card2_num = (card2 % 13) + 1;
@@ -153,6 +152,11 @@
         if(!needBet){
             return
         }
+        if (isBetting){
+            console.debug("有其他桌正在下注...,本次取消："+tableId)
+            return;
+        }
+        isBetting = true;
         // area-0:闲对  area-3:闲  area-5:庄  area-4:和
         const betAreaMap = {
             0: 'area-5',
@@ -166,7 +170,7 @@
             8: 'area-3',
             9: 'area-3'
         };
-        
+
         const betArea = card1_num === card2_num ? 'area-0' : betAreaMap[xDot];
         let theBetAmount;
         if(betAmount>1){
@@ -179,6 +183,15 @@
         }
         if (theBetAmount < 10) theBetAmount = 10;
         console.info('bet area:'+betArea+' money:'+theBetAmount);
+        if(self.wsNet){
+            const randomTimeOffset = Math.floor(Math.random() * (300 - 100 + 1))+100;
+            const timestmp = Date.now()-randomTimeOffset
+
+            area = betArea=='area-3'?4:betArea=='area-5'?5:betArea=='area-4'?2:betArea=='area-0'?1:'' ;//闲:4 , 庄:5 , 和:2 闲对:1
+            self.wsNet.send(500, 2000, { roomId: tableId, betEnv: 3, carrier: tableId+'-' + timestmp, areaBet: [{ area: area, bet: theBetAmount * 100, betType: 0, count: 1 }] });
+            console.info('handle pack spend time:', new Date().getTime() - theTime, card1_num, card2_num, betArea,theBetAmount);
+            return;
+        }
         const coins = selectCoins(theBetAmount);
         if (coins.length == 0) return;
         const chipValue = coins[0];
@@ -188,7 +201,7 @@
         const confirmAreaSelector = `#lot-bet-item-box-${tableId} .${betArea} .button-click.chips-button-right`;
         const outDiv = document.querySelector(`#lot-bet-item-box-${tableId}`);
         let clickedBet = false;
-    
+
         if (outDiv) {
             if (outDiv.getAttribute('class') == 'lazy-show' && outDiv.getAttribute('inview') == 'true') {
                 clickChipAndBet();
@@ -222,22 +235,112 @@
                 clickChipAndBet();
             }, 20);
         }
-    
-        function clickChipAndBet() {
-            if (chipButton && window.getComputedStyle(chipButton).display !== 'none' && chipButton.parentElement && window.getComputedStyle(chipButton.parentElement).display !== 'none' && !clickedBet) {
+        function betBaccInSingleTable(tableId, card1, card2, theTime, betAmount){
+            let maxBet = getMaxSelectedChipValue();
+            const card1_num = (card1 % 13) + 1;
+            const card2_num = (card2 % 13) + 1;
+            let dot1 = card1_num >= 10 ? 0 : card1_num, dot2 = card2_num >= 10 ? 0 : card2_num;
+            let xDot = (dot1 + dot2) % 10;
+            let needBet,needBetAmount,theDotKey
+            for(key in window.betRates){
+                if(key.includes(''+xDot)){
+                    theDotKey = key
+                    needBet = window.betRates[key][1]
+                    needBetAmount = window.betRates[key][0]
+                    break
+                }
+            }
+            if(card1_num==card2_num){
+                let key = '闲对'
+                theDotKey = key
+                needBet = window.betRates[key][1]
+                needBetAmount = window.betRates[key][0]
+            }
+
+            // area-0:闲对  area-4:闲  area-6:庄  area-5:和
+            const betAreaMap = {
+                0: 'area-banker',
+                1: 'area-banker',
+                2: 'area-banker',
+                3: 'area-banker',
+                4: 'area-banker',
+                5: 'area-banker',
+                6: 'area-tied',
+                7: 'area-player',
+                8: 'area-player',
+                9: 'area-player'
+            };
+            const betArea = card1_num === card2_num ? 'area-id-1' : betAreaMap[xDot];
+            let theBetAmount;
+            if(betAmount>1){
+                theBetAmount = betAmount;
+            }else if (betAmount==-1||betAmount==0){
+                theBetAmount = needBetAmount;
+            }
+            if(theBetAmount<=1){
+                theBetAmount = maxBet * theBetAmount;
+            }
+            if (theBetAmount < 10) theBetAmount = 10;
+            console.info("闲"+xDot+"["+card1_num+","+card2_num+"] 下注:"+theDotKey+" - "+betArea+" - "+theBetAmount+' - '+needBet);
+            if(!needBet){
+                return
+            }
+            if(window.wsNet){
+                const randomTimeOffset = Math.floor(Math.random() * (300 - 100 + 1))+100;
+                const timestmp = Date.now()-randomTimeOffset
+
+                area = betArea=='area-player'?4:betArea=='area-banker'?5:betArea=='area-tied'?2:betArea=='area-id-1'?1:'' ;//闲:4 , 庄:5 , 和:2 闲对:1
+                wsNet.send(500, 2000, { roomId: tableId, betEnv: 1, carrier: '8801-' + timestmp, areaBet: [{ area: area, bet: theBetAmount * 100, betType: 0, count: 1 }] });
+                console.info('handle pack spend time:', new Date().getTime() - theTime, card1_num, card2_num, betArea,theBetAmount);
+                //return;
+            }
+            const coins = selectCoins(theBetAmount);
+            if(coins.length==0)return;
+            const chipValue = coins[0];
+            const cnt = coins.filter(item => item === chipValue).length;
+            const chipButton = document.querySelector(`div[data-type="${chipValue}"]`);
+            if (chipButton && window.getComputedStyle(chipButton).display !== 'none' && chipButton.parentElement && window.getComputedStyle(chipButton.parentElement).display !== 'none') {
+                const betAreaSelector = '#bettingSwiper .' + betArea+ '>div[data-safe-area]';
+                const confirmSelector = '#bettingSwiper .' + betArea + ' .button-click.chips-button-right';
                 chipButton.addEventListener('click', () => {
                     console.info(`handle message Clicked chip with value: ${chipValue}`);
-                    clickBetAreaThenConfirm(clickAreaSelector, confirmAreaSelector, cnt, theTime);
+                    clickBetAreaThenConfirm(betAreaSelector,confirmSelector,cnt,theTime);
                 }, { once: true });
                 clickCenter(chipButton);
+            }
+        }
+
+        function clickChipAndBet() {
+            if (chipButton && window.getComputedStyle(chipButton).display !== 'none' && chipButton.parentElement && window.getComputedStyle(chipButton.parentElement).display !== 'none' && !clickedBet) {
                 clickedBet = true;
+                // 检查 chipButton 是否具有 chips-select 类
+                if (chipButton.classList.contains('chips-select')) {
+                    console.info('chipButton already chips-select:',chipValue);
+                    clickBetAreaThenConfirm(clickAreaSelector, confirmAreaSelector, cnt, theTime);
+                } else {
+                    console.info('chipButton does not have chips-select class, clicking chipButton and observing...');
+                    clickCenter(chipButton);
+                    clickedBet = true;
+                    const observer = new MutationObserver((mutationsList) => {
+                        for (let mutation of mutationsList) {
+                            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                                if (chipButton.classList.contains('chips-select')) {
+                                    observer.disconnect();
+                                    console.info(`handle message Clicked chip with value: ${chipValue}`);
+                                    clickBetAreaThenConfirm(clickAreaSelector, confirmAreaSelector, cnt, theTime);
+                                }
+                            }
+                        }
+                    });
+                    observer.observe(chipButton, { attributes: true, attributeFilter: ['class'] });
+                }
             }
         }
     }
-    
+
     function clickBetAreaThenConfirm(areaSelector, confirmSelector, count, theTime) {
         document.querySelectorAll(areaSelector).forEach(div => {
-            for (let i = count - 1; i >= 0; i--) {
+            for (let i = count - 1; i > 0; i--) {
                 clickCenter(div);
             }
             const clickPromise = new Promise(resolve => {
@@ -255,15 +358,15 @@
                     resolve(); // 解析 Promise
                 }, { once: true });
             });
-    
             clickCenter(div);
             console.info('handle message click bet div spend time:', new Date().getTime() - theTime);
             // 等待 clickPromise 解析后再继续
             clickPromise.then(() => {
             });
         });
+        isBetting = false
     }
-    
+
     self.handleTableMessage = handleTableMessage;
 
     // 暴露方法供外部调用
@@ -306,15 +409,15 @@
         floatingDiv.appendChild(title);
         // 默认值
         const defaultValues = {
-            '0庄': [0.29, true],
-            '1庄': [0.28, true],
-            '2庄': [0.25, true],
-            '3庄': [0.21, true],
-            '4庄': [0.14, true],
-            '5庄': [0.05, true],
-            '6和': [0.03, true],
-            '7闲': [0.15, true],
-            '8闲': [0.65, true],
+//            '0庄': [0.29, false],
+//            '1庄': [0.28, false],
+//            '2庄': [0.25, false],
+//            '3庄': [0.21, false],
+//            '4庄': [0.14, false],
+//            '5庄': [0.05, false],
+//            '6和': [0.03, false],
+//            '7闲': [0.15, false],
+//            '8闲': [0.65, false],
             '9闲': [1, true],
             '闲对': [1, true],
             '龙虎': [1, true]
